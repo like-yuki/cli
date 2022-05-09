@@ -28,5 +28,8 @@
   "devDependencies": {
     "@types/node": "^17.0.31",
     "release-it": "^15.0.0"
+  },
+  "//publishConfig//": {
+    "registry": "https://packages.aliyun.com/62794c9611fc0f0c9e299cd7/npm/npm-registry/"
   }
 }
