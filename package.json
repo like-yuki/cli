@@ -1,0 +1,32 @@
+{
+  "name": "@like-yuki/cli",
+  "version": "0.0.6-beta.0",
+  "description": "i like yuki",
+  "main": "index.js",
+  "bin": {
+    "lk": "index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "release": "release-it",
+    "release:pre": "release-it --preRelease=beta"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/like-yuki/cli.git"
+  },
+  "keywords": [
+    "yuki",
+    "cli"
+  ],
+  "author": "yuki",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/like-yuki/cli/issues"
+  },
+  "homepage": "https://github.com/like-yuki/cli#readme",
+  "devDependencies": {
+    "@types/node": "^17.0.31",
+    "release-it": "^15.0.0"
+  }
+}
