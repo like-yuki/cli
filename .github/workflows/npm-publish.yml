@@ -36,6 +36,6 @@ jobs:
           registry-url: https://registry.npmjs.org/
 
       - run: npm i
-      - run: npm release:alpha
+      - run: npm run release:alpha
         env:
           NPM_TOKEN: ${{secrets.NPM_TOKEN}}
