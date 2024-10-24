@@ -8,10 +8,10 @@
   },
   "type": "module",
   "scripts": {
-    "release": "release-it",
-    "release:alpha": "release-it --preRelease=alpha --verbose",
-    "release:beta": "release-it --preRelease=beta",
-    "release:rc": "release-it --preRelease=rc"
+    "release": "npx release-it",
+    "release:alpha": "npx release-it --ci --preRelease=alpha",
+    "release:beta": "npx release-it --ci --preRelease=beta",
+    "release:rc": "npx release-it --ci --preRelease=rc"
   },
   "repository": {
     "type": "git",
