@@ -1,6 +1,6 @@
 {
   "name": "@like-yuki/cli",
-  "version": "0.0.6-alpha.0",
+  "version": "0.0.6-alpha.2",
   "description": "i like yuki",
   "main": "index.js",
   "bin": {
@@ -9,7 +9,7 @@
   "type": "module",
   "scripts": {
     "release": "release-it",
-    "release:alpha": "release-it --preRelease=alpha",
+    "release:alpha": "release-it --preRelease=alpha --verbose",
     "release:beta": "release-it --preRelease=beta",
     "release:rc": "release-it --preRelease=rc"
   },
@@ -29,9 +29,10 @@
   "homepage": "https://github.com/like-yuki/cli#readme",
   "devDependencies": {
     "@types/node": "^17.0.31",
-    "release-it": "^15.0.0"
+    "release-it": "^16.1.0"
   },
-  "//publishConfig": {
-    "registry": "https://packages.aliyun.com/62794c9611fc0f0c9e299cd7/npm/npm-registry/"
+  "publishConfig": {
+    "access": "public",
+    "//registry": "https://packages.aliyun.com/62794c9611fc0f0c9e299cd7/npm/npm-registry/"
   }
 }

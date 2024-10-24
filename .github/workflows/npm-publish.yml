@@ -6,9 +6,9 @@ name: Node.js Package
 on:
   workflow_dispatch:
   push:
-    branches: [ master ]
- # schedule:
- #   - cron: '00 23 * * 1,4'
+    branches: [master]
+  # schedule:
+  #   - cron: '00 23 * * 1,4'
 
 # on:
 #  release:
@@ -21,8 +21,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-      - run: npm ci
+          node-version: 17
+      - run: npm i
     #  - run: npm test
 
   publish-npm:
@@ -32,9 +32,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 17
           registry-url: https://registry.npmjs.org/
-      - run: npm ci
+
+      - run: npm config set //registry.npmjs.org/:_authToken=$NPM_TOKEN
+      - run: npm i
       - run: npm run release:alpha
         env:
-          NODE_AUTH_TOKEN: ${{secrets.npm_token}}
+          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
