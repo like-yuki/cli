@@ -6,6 +6,6 @@ if (process?.argv[2]) {
     console.log(item);
   });
 } else {
-  console.log('like-yuki');
+  console.log('Minakami-Yuki');
 }
-export const yuki = () => console.log('yuki');
+export const yuki = () => console.log('Minakami-Yuki');
