@@ -35,7 +35,6 @@ jobs:
           node-version: 17
           registry-url: https://registry.npmjs.org/
 
-      - run: npm config set //registry.npmjs.org/:_authToken=$NPM_TOKEN
       - run: npm i
       - run: npm publish
         env:
