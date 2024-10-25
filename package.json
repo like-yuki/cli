@@ -33,6 +33,6 @@
   },
   "publishConfig": {
     "access": "public",
-    "@@registry@@": "https://packages.aliyun.com/62794c9611fc0f0c9e299cd7/npm/npm-registry/"
+    "registry": "https://registry.npmjs.org/"
   }
 }
