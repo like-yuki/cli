@@ -40,12 +40,6 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Check for unstaged changes
-        run:  |
-          git config --global user.name 'github-actions'
-          git config --global user.email 'github-actions@github.com'
-          git diff --quiet || (git add . && git commit -m "Ensure clean working dir")
-
       - name: Install dependencies
         run: npm install
 
