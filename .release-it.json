@@ -1,7 +1,12 @@
 {
+  "git": {
+    "commitMessage": "Release ${version}",
+    "tagName": "v${version}"
+  },
   "npm": {
-    "publish": true,
-    "access": "public",
-    "registry": "https://registry.npmjs.org"
+    "publish": true
+  },
+  "github": {
+    "release": true
   }
 }
