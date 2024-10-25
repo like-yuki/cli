@@ -1,6 +1,6 @@
 {
   "name": "@like-yuki/cli",
-  "version": "0.2.0",
+  "version": "0.0.6-alpha.3",
   "description": "i like yuki",
   "main": "index.js",
   "bin": {
@@ -8,10 +8,10 @@
   },
   "type": "module",
   "scripts": {
-    "release": "npx release-it",
-    "release:alpha": "npx release-it --ci --preRelease=alpha",
-    "release:beta": "npx release-it --ci --preRelease=beta",
-    "release:rc": "npx release-it --ci --preRelease=rc"
+    "release": "release-it",
+    "release:alpha": "release-it --preRelease=alpha --verbose",
+    "release:beta": "release-it --preRelease=beta",
+    "release:rc": "release-it --preRelease=rc"
   },
   "repository": {
     "type": "git",
@@ -32,6 +32,7 @@
     "release-it": "^16.1.0"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "//registry": "https://packages.aliyun.com/62794c9611fc0f0c9e299cd7/npm/npm-registry/"
   }
 }

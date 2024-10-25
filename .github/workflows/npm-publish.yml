@@ -35,19 +35,7 @@ jobs:
           node-version: 17
           registry-url: https://registry.npmjs.org/
 
-      - name: Configure npm auth
-        run: echo "//registry.npmjs.org/:_authToken=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" > ~/.npmrc
+      - run: npm i
+      - run: npm publish
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Install release-it
-        run: npm install --global release-it
-
-      - name: Run release-it
-        run: npx release-it --ci --preRelease=alpha --no-git.requireCleanWorkingDir --no-git.push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
