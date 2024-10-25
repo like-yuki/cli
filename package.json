@@ -1,6 +1,6 @@
 {
   "name": "@like-yuki/cli",
-  "version": "0.0.7",
+  "version": "0.0.8",
   "description": "i like yuki",
   "main": "index.js",
   "bin": {
