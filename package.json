@@ -1,6 +1,6 @@
 {
   "name": "@like-yuki/cli",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "i like yuki",
   "main": "index.js",
   "bin": {
@@ -32,7 +32,6 @@
     "release-it": "^16.1.0"
   },
   "publishConfig": {
-    "access": "public",
-    "//registry": "https://packages.aliyun.com/62794c9611fc0f0c9e299cd7/npm/npm-registry/"
+    "access": "public"
   }
 }
