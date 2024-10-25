@@ -47,7 +47,7 @@ jobs:
         run: npm install --global release-it
 
       - name: Run release-it
-        run: npx release-it --ci --preRelease=alpha --no-git.requireCleanWorkingDir
+        run: npx release-it --ci --preRelease=alpha --no-git.requireCleanWorkingDir --no-git.push
         env:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
