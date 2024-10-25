@@ -40,6 +40,9 @@ jobs:
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
+      - name: Check for unstaged changes
+        run:  git diff-index --quiet HEAD || git add . && git commit -m "CI Commit unstaged changes"
+
       - name: Install dependencies
         run: npm install
 
