@@ -1,6 +1,6 @@
 {
   "name": "@like-yuki/cli",
-  "version": "0.1.0-rc",
+  "version": "0.2.0",
   "description": "i like yuki",
   "main": "index.js",
   "bin": {
@@ -32,7 +32,6 @@
     "release-it": "^16.1.0"
   },
   "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
+    "access": "public"
   }
 }
