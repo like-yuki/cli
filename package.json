@@ -1,6 +1,6 @@
 {
   "name": "@like-yuki/cli",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "i like yuki",
   "main": "index.js",
   "bin": {
@@ -9,7 +9,7 @@
   "type": "module",
   "scripts": {
     "release": "release-it",
-    "release:alpha": "release-it --preRelease=alpha --verbose",
+    "release:alpha": "release-it --preRelease=alpha",
     "release:beta": "release-it --preRelease=beta",
     "release:rc": "release-it --preRelease=rc"
   },
