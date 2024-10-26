@@ -16,14 +16,14 @@ on:
 
 jobs:
   # build:
-    # runs-on: ubuntu-latest
-    # steps:
-    #   - uses: actions/checkout@v4
-    #   - uses: actions/setup-node@v4
-    #     with:
-    #       node-version: 17
-    # - run: npm i
-    # - run: npm test
+  # runs-on: ubuntu-latest
+  # steps:
+  #   - uses: actions/checkout@v4
+  #   - uses: actions/setup-node@v4
+  #     with:
+  #       node-version: 17
+  # - run: npm i
+  # - run: npm test
 
   publish-npm:
     # needs: build
@@ -35,7 +35,7 @@ jobs:
           node-version: 17
           registry-url: https://registry.npmjs.org/
 
-        run: |
+      - run: |
           npm config set //registry.npmjs.org/:_authToken=$NPM_TOKEN
           npm config set registry=https://registry.npmjs.org/
           npm config set always-auth=true
