@@ -1,0 +1,39 @@
+{
+  "name": "@like-yuki/cli",
+  "version": "0.0.2-rc.1",
+  "description": "i like yuki",
+  "main": "index.js",
+  "typings": "index.d.ts",
+  "bin": {
+    "lk": "index.js"
+  },
+  "type": "module",
+  "scripts": {
+    "lk": "node index.js",
+    "release": "release-it",
+    "release:alpha": "release-it --preRelease=alpha",
+    "release:beta": "release-it --preRelease=beta",
+    "release:rc": "release-it --preRelease=rc --ci"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/like-yuki/cli.git"
+  },
+  "keywords": [
+    "yuki",
+    "cli"
+  ],
+  "author": "yuki",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/like-yuki/cli/issues"
+  },
+  "homepage": "https://github.com/like-yuki/cli#readme",
+  "devDependencies": {
+    "@types/node": "^18",
+    "release-it": "^16"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

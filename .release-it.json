@@ -1,0 +1,16 @@
+{
+  "git": {
+    "commitMessage": "Release ${version}",
+    "tagName": "v${version}",
+    "push": false
+  },
+  "npm": {
+    "publish": true,
+    "access": "public",
+    "skipChecks": true
+  },
+  "github": {
+    "release": true,
+    "autoGenerate":true
+  }
+}
