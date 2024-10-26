@@ -1,0 +1,1 @@
+export declare function randomTxt(input?: string): void;
