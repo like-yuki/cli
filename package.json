@@ -28,8 +28,8 @@
   },
   "homepage": "https://github.com/like-yuki/cli#readme",
   "devDependencies": {
-    "@types/node": "^17.0.31",
-    "release-it": "^16.1.0"
+    "@types/node": "^18",
+    "release-it": "^16"
   },
   "publishConfig": {
     "access": "public"
