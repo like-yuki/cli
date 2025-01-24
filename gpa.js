@@ -9,16 +9,17 @@ const execPromise = promisify(exec);
 
 // 日志工具对象，支持不同级别的彩色输出
 const logger = {
-  info: (msg) => console.log(msg),
-  warn: (msg) => console.warn("\x1b[33m%s\x1b[0m", msg), // 黄色警告
-  error: (msg) => console.error("\x1b[31m%s\x1b[0m", msg), // 红色错误
-  success: (msg) => console.log("\x1b[32m%s\x1b[0m", msg), // 绿色成功
+  info: (...msg) => console.log(msg.join(" ")),
+  warn: (...msg) => console.warn("\x1b[33m%s\x1b[0m", msg.join(" ")), // 黄色警告
+  error: (...msg) => console.error("\x1b[31m%s\x1b[0m", msg.join(" ")), // 红色错误
+  success: (...msg) => console.log("\x1b[32m%s\x1b[0m", msg.join(" ")), // 绿色成功
 };
 
 class GitPuller {
-  constructor(maxDepth = 0) {
-    // 限制递归深度在0-10之间
-    this.maxDepth = Math.max(1, Math.min(10, parseInt(maxDepth) || 0));
+  constructor(maxDepth = 1, verbose = false) {
+    // 限制递归深度在1-10之间
+    this.maxDepth = Math.max(0, Math.min(10, parseInt(maxDepth)));
+    this.verbose = verbose; // 添加详细输出控制标志
     this.gitRepos = []; // 存储发现的所有git仓库
     this.successRepos = []; // 成功更新的仓库
     this.failedRepos = []; // 更新失败的仓库
@@ -155,6 +156,21 @@ class GitPuller {
    * @param {number} currentDepth - 当前递归深度
    */
   async scanDirectories(currentPath, currentDepth = 1) {
+    if (this.maxDepth === 0 && currentDepth === 1) {
+      const fullPath = path.join(currentPath, "./");
+      if (await this.isGitRepo(fullPath)) {
+        const repoInfo = await this.getRepoInfo(fullPath);
+        this.gitRepos.push({
+          name: currentPath,
+          path: fullPath,
+          timestamp: new Date(),
+          ...repoInfo,
+        });
+        logger.info(`发现 Git 仓库: ${currentPath}`);
+      }
+      return;
+    }
+
     if (currentDepth > this.maxDepth) return;
 
     try {
@@ -217,7 +233,8 @@ class GitPuller {
 
       // 如果有未提交的更改，先暂存
       if (hasChanges) {
-        logger.info(`发现未提交的更改，正在暂存 ${repo.name} 的更改...`);
+        this.verbose &&
+          logger.info(`发现未提交的更改，正在暂存 ${repo.name} 的更改...`);
         const stashResult = await this.executeGitCommand(
           "git stash --include-untracked",
           repo.path
@@ -232,7 +249,7 @@ class GitPuller {
 
       // 如果之前有暂存的更改，现在恢复
       if (hasChanges) {
-        logger.info(`正在恢复 ${repo.name} 的暂存更改...`);
+        this.verbose && logger.info(`正在恢复 ${repo.name} 的暂存更改...`);
         const popResult = await this.executeGitCommand(
           "git stash pop",
           repo.path
@@ -244,7 +261,9 @@ class GitPuller {
 
       if (pullResult.success) {
         this.successRepos.push(repo);
-        logger.success(`✅ 更新成功: ${repo.name}\n${pullResult.output}`);
+        logger.success(
+          `✅ 更新成功: ${repo.name}\n${this.verbose ? pullResult.output : ""}`
+        );
       } else {
         throw new Error(pullResult.output);
       }
@@ -253,7 +272,9 @@ class GitPuller {
         ...repo,
         error: error.message,
       });
-      logger.error(`❌ 更新失败: ${repo.name}\n${error.message}`);
+      logger.error(
+        `❌ 更新失败: ${repo.name}\n${this.verbose ? error.message : ""}`
+      );
     }
   }
 
@@ -283,7 +304,7 @@ class GitPuller {
 
     try {
       // 扫描目录
-      await this.scanDirectories(process.cwd(),1);
+      await this.scanDirectories(process.cwd());
 
       if (this.gitRepos.length === 0) {
         logger.warn("没有找到Git仓库！");
@@ -294,10 +315,12 @@ class GitPuller {
       logger.info("\n找到以下Git仓库:");
       this.gitRepos.forEach((repo) => {
         logger.info(`\n- ${repo.name}`);
-        logger.info(`  路径: ${repo.path}`);
-        logger.info(`  远程仓库: ${repo.remoteUrl}`);
-        logger.info(`  当前分支: ${repo.currentBranch}`);
-        logger.info(`  最后提交: ${repo.lastCommit}`);
+        if (this.verbose) {
+          logger.info(`  路径: ${repo.path}`);
+          logger.info(`  远程仓库: ${repo.remoteUrl}`);
+          logger.info(`  当前分支: ${repo.currentBranch}`);
+          logger.info(`  最后提交: ${repo.lastCommit}`);
+        }
       });
 
       // 开始更新操作
@@ -325,14 +348,14 @@ class GitPuller {
       if (report.failureCount > 0) {
         logger.error("\n❌ 更新失败的仓库:");
         report.failedRepos.forEach((repo) =>
-          logger.error(`- ${repo.name} (原因: ${repo.error})`)
+          logger.error(`- ${repo.name}\n 原因: ${repo.error}\n\n`)
         );
       }
 
       if (report.skippedCount > 0) {
         logger.warn("\n⏭️ 跳过的仓库:");
         report.skippedRepos.forEach((repo) =>
-          logger.warn(`- ${repo.name} (原因: ${repo.reason})`)
+          logger.warn(`- ${repo.name}\n 原因: ${repo.reason}\n\n`)
         );
       }
     } catch (error) {
@@ -344,18 +367,30 @@ class GitPuller {
 
 // 主程序入口
 try {
-  // 获取命令行参数中的递归深度
-  const depth = process.argv[2] ? parseInt(process.argv[2]) : 0;
-  if (isNaN(depth) || depth < 0) {
+  // 解析命令行参数
+  const args = process.argv.slice(2);
+  let depth = 1;
+  let verbose = false;
+
+  // 处理命令行参数
+  args.forEach((arg) => {
+    if (arg === "-d" || arg === "--detail") {
+      verbose = true;
+    } else if (!isNaN(parseInt(arg))) {
+      depth = parseInt(arg);
+    }
+  });
+
+  if (depth < 0) {
     throw new Error("递归深度必须是大于0的数字");
   }
 
-  const puller = new GitPuller(depth);
+  const puller = new GitPuller(depth, verbose);
   puller.run().catch((error) => {
     logger.error("程序执行失败:", error);
     process.exit(1);
   });
 } catch (error) {
-  logger.error("参数错误:", error.message);
+  logger.error(`参数错误:`, error.message);
   process.exit(1);
 }
