@@ -5,7 +5,8 @@
   "main": "index.js",
   "typings": "index.d.ts",
   "bin": {
-    "lk": "index.js"
+    "lk": "index.js",
+    "lk-gpa": "gpa.js"
   },
   "type": "module",
   "scripts": {
