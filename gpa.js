@@ -1,27 +1,19 @@
-// git pull all
-// 用 nodejs 20+ 写一个脚本，自动 git pull 所有的git仓库
-// 1. 读取当前目录下的所有文件夹
-//  1.1 递归读取所有文件夹，可以通过参数控制递归深度，默认为1
-// 2. 判断该文件夹是否是git仓库
-// 3. 输出所有是git仓库的文件夹名称及路径
-// 4. 根据前一步的结果，在每个是git仓库的文件夹中行git pull
-//   4.1 判断git status, 如果有未提交的文件，git stash 暂存所有文件，包括未跟踪的
-//   4.2 git pull
-//   4.3 git stash pop 恢复所有暂存的文件
-// 5. 如果不是git仓库，跳过，输出提示
-// 6. 输出pull的结果
-// 7. 输出所有仓库的pull结果
-// 8. 输出pull成功的仓库数量
-// 9. 输出pull失败的仓库数量
-// 10. 输出pull失败的仓库名称
-// 11. 输出pull成功的仓库名称
+#!/usr/bin/env node
 
-const fs = require("fs").promises;
-const path = require("path");
-const { exec } = require("child_process");
-const util = require("util");
+import { promises as fs } from "fs";
+import * as path from "path";
+import { exec } from "child_process";
+import { promisify } from "util";
 
-const execPromise = util.promisify(exec);
+const execPromise = promisify(exec);
+
+// 添加日志工具函数
+const logger = {
+  info: (msg) => console.log(msg),
+  warn: (msg) => console.warn("\x1b[33m%s\x1b[0m", msg), // 黄色
+  error: (msg) => console.error("\x1b[31m%s\x1b[0m", msg), // 红色
+  success: (msg) => console.log("\x1b[32m%s\x1b[0m", msg), // 绿色
+};
 
 class GitPuller {
   constructor(maxDepth = 1) {
@@ -110,35 +102,50 @@ class GitPuller {
     }
   }
 
-    // 获取仓库详细信息
-    async getRepoInfo(dirPath) {
-        try {
-            // 获取远程仓库URL
-            const remoteUrlResult = await this.executeGitCommand('git config --get remote.origin.url', dirPath);
-            const remoteUrl = remoteUrlResult.success ? remoteUrlResult.output.trim() : '未知';
+  // 获取仓库详细信息
+  async getRepoInfo(dirPath) {
+    try {
+      // 获取远程仓库URL
+      const remoteUrlResult = await this.executeGitCommand(
+        "git config --get remote.origin.url",
+        dirPath
+      );
+      const remoteUrl = remoteUrlResult.success
+        ? remoteUrlResult.output.trim()
+        : "未知";
 
-            // 获取当前分支
-            const branchResult = await this.executeGitCommand('git rev-parse --abbrev-ref HEAD', dirPath);
-            const currentBranch = branchResult.success ? branchResult.output.trim() : '未知';
+      // 获取当前分支
+      const branchResult = await this.executeGitCommand(
+        "git rev-parse --abbrev-ref HEAD",
+        dirPath
+      );
+      const currentBranch = branchResult.success
+        ? branchResult.output.trim()
+        : "未知";
 
-            // 获取最后一次提交信息
-            const lastCommitResult = await this.executeGitCommand('git log -1 --format="%h - %s (%cr)"', dirPath);
-            const lastCommit = lastCommitResult.success ? lastCommitResult.output.trim() : '未知';
+      // 获取最后一次提交信息
+      const lastCommitResult = await this.executeGitCommand(
+        'git log -1 --format="%h - %s (%cr)"',
+        dirPath
+      );
+      const lastCommit = lastCommitResult.success
+        ? lastCommitResult.output.trim()
+        : "未知";
 
-            return {
-                remoteUrl,
-                currentBranch,
-                lastCommit
-            };
-        } catch (error) {
-            return {
-                remoteUrl: '获取失败',
-                currentBranch: '获取失败',
-                lastCommit: '获取失败',
-                error: error.message
-            };
-        }
+      return {
+        remoteUrl,
+        currentBranch,
+        lastCommit,
+      };
+    } catch (error) {
+      return {
+        remoteUrl: "获取失败",
+        currentBranch: "获取失败",
+        lastCommit: "获取失败",
+        error: error.message,
+      };
     }
+  }
 
   // 递归扫描目录
   async scanDirectories(currentPath, currentDepth = 0) {
@@ -164,7 +171,7 @@ class GitPuller {
                 name: entry.name,
                 path: fullPath,
                 timestamp: new Date(),
-                ...repoInfo
+                ...repoInfo,
               });
             } else if (currentDepth < this.maxDepth) {
               await this.scanDirectories(fullPath, currentDepth + 1);
@@ -265,12 +272,12 @@ class GitPuller {
       }
 
       console.log("\n找到以下Git仓库:");
-      this.gitRepos.forEach((repo) =>{
+      this.gitRepos.forEach((repo) => {
         console.log(`\n- ${repo.name}`);
-            console.log(`  路径: ${repo.path}`);
-            console.log(`  远程仓库: ${repo.remoteUrl}`);
-            console.log(`  当前分支: ${repo.currentBranch}`);
-            console.log(`  最后提交: ${repo.lastCommit}`);
+        console.log(`  路径: ${repo.path}`);
+        console.log(`  远程仓库: ${repo.remoteUrl}`);
+        console.log(`  当前分支: ${repo.currentBranch}`);
+        console.log(`  最后提交: ${repo.lastCommit}`);
       });
 
       console.log("\n🔄 开始更新操作...");
