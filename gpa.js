@@ -7,43 +7,52 @@ import { promisify } from "util";
 
 const execPromise = promisify(exec);
 
-// 添加日志工具函数
+// 日志工具对象，支持不同级别的彩色输出
 const logger = {
   info: (msg) => console.log(msg),
-  warn: (msg) => console.warn("\x1b[33m%s\x1b[0m", msg), // 黄色
-  error: (msg) => console.error("\x1b[31m%s\x1b[0m", msg), // 红色
-  success: (msg) => console.log("\x1b[32m%s\x1b[0m", msg), // 绿色
+  warn: (msg) => console.warn("\x1b[33m%s\x1b[0m", msg), // 黄色警告
+  error: (msg) => console.error("\x1b[31m%s\x1b[0m", msg), // 红色错误
+  success: (msg) => console.log("\x1b[32m%s\x1b[0m", msg), // 绿色成功
 };
 
 class GitPuller {
   constructor(maxDepth = 1) {
-    // 参数验证
-    this.maxDepth = Math.max(1, Math.min(10, parseInt(maxDepth) || 1)); // 限制递归深度在1-10之间
-    this.gitRepos = [];
-    this.successRepos = [];
-    this.failedRepos = [];
-    this.skippedRepos = []; // 新增：记录跳过的仓库（如权限问题等）
+    // 限制递归深度在1-10之间
+    this.maxDepth = Math.max(1, Math.min(10, parseInt(maxDepth) || 1));
+    this.gitRepos = []; // 存储发现的所有git仓库
+    this.successRepos = []; // 成功更新的仓库
+    this.failedRepos = []; // 更新失败的仓库
+    this.skippedRepos = []; // 跳过的仓库
+    this.startTime = Date.now(); // 记录开始时间
   }
 
-  // 安全的执行git命令
+  /**
+   * 执行git命令的通用方法
+   * @param {string} command - git命令
+   * @param {string} cwd - 执行命令的目录
+   * @param {number} timeout - 超时时间(毫秒)
+   */
   async executeGitCommand(command, cwd, timeout = 30000) {
     try {
       const { stdout, stderr } = await execPromise(command, {
         cwd,
-        timeout, // 添加超时限制
-        maxBuffer: 1024 * 1024 * 10, // 增加缓冲区大小到10MB
+        timeout,
+        maxBuffer: 1024 * 1024 * 30, // 30MB缓冲区
       });
       return { success: true, output: stdout || stderr };
     } catch (error) {
       return {
         success: false,
         output: error.message,
-        error: error,
+        error,
       };
     }
   }
 
-  // 检查目录是否可访问
+  /**
+   * 检查目录是否可访问
+   * @param {string} dirPath - 目录路径
+   */
   async isDirectoryAccessible(dirPath) {
     try {
       await fs.access(dirPath, fs.constants.R_OK | fs.constants.W_OK);
@@ -53,21 +62,21 @@ class GitPuller {
     }
   }
 
-  // 检查是否为git仓库
+  /**
+   * 检查是否为git仓库
+   * @param {string} dirPath - 目录路径
+   */
   async isGitRepo(dirPath) {
     try {
-      // 1. 首先检查目录是否存在且可访问
+      // 首先检查目录是否存在且可访问
       if (!(await this.isDirectoryAccessible(dirPath))) {
         return false;
       }
-
-      // 2. 使用 git rev-parse 命令检查
+      // 使用git命令检查是否为git仓库
       const result = await this.executeGitCommand(
         "git rev-parse --is-inside-work-tree",
         dirPath
       );
-
-      // 3. 如果命令执行成功且输出为 "true"，则确认是 git 仓库
       return result.success && result.output.trim() === "true";
     } catch {
       return false;
@@ -105,37 +114,30 @@ class GitPuller {
   // 获取仓库详细信息
   async getRepoInfo(dirPath) {
     try {
-      // 获取远程仓库URL
-      const remoteUrlResult = await this.executeGitCommand(
-        "git config --get remote.origin.url",
-        dirPath
-      );
-      const remoteUrl = remoteUrlResult.success
-        ? remoteUrlResult.output.trim()
-        : "未知";
-
-      // 获取当前分支
-      const branchResult = await this.executeGitCommand(
-        "git rev-parse --abbrev-ref HEAD",
-        dirPath
-      );
-      const currentBranch = branchResult.success
-        ? branchResult.output.trim()
-        : "未知";
-
-      // 获取最后一次提交信息
-      const lastCommitResult = await this.executeGitCommand(
-        'git log -1 --format="%h - %s (%cr)"',
-        dirPath
-      );
-      const lastCommit = lastCommitResult.success
-        ? lastCommitResult.output.trim()
-        : "未知";
+      // 并行执行多个git命令获取仓库信息
+      const [remoteUrlResult, branchResult, lastCommitResult] =
+        await Promise.all([
+          // 获取远程仓库URL
+          this.executeGitCommand("git config --get remote.origin.url", dirPath),
+          // 获取当前分支
+          this.executeGitCommand("git rev-parse --abbrev-ref HEAD", dirPath),
+          // 获取最后一次提交信息
+          this.executeGitCommand(
+            'git log -1 --format="%h - %s (%cr)"',
+            dirPath
+          ),
+        ]);
 
       return {
-        remoteUrl,
-        currentBranch,
-        lastCommit,
+        remoteUrl: remoteUrlResult.success
+          ? remoteUrlResult.output.trim()
+          : "未知",
+        currentBranch: branchResult.success
+          ? branchResult.output.trim()
+          : "未知",
+        lastCommit: lastCommitResult.success
+          ? lastCommitResult.output.trim()
+          : "未知",
       };
     } catch (error) {
       return {
@@ -147,25 +149,31 @@ class GitPuller {
     }
   }
 
-  // 递归扫描目录
+  /**
+   * 递归扫描目录查找git仓库
+   * @param {string} currentPath - 当前扫描的路径
+   * @param {number} currentDepth - 当前递归深度
+   */
   async scanDirectories(currentPath, currentDepth = 0) {
     if (currentDepth > this.maxDepth) return;
 
     try {
       // 检查目录是否可访问
       if (!(await this.isDirectoryAccessible(currentPath))) {
-        console.warn(`警告: 目录 ${currentPath} 无法访问，已跳过`);
+        logger.warn(`警告: 目录 ${currentPath} 无法访问，已跳过`);
         return;
       }
 
       const entries = await fs.readdir(currentPath, { withFileTypes: true });
 
+      // 遍历目录中的所有条目
       for (const entry of entries) {
+        // 跳过隐藏目录
         if (entry.isDirectory() && !entry.name.startsWith(".")) {
-          // 跳过隐藏目录
           const fullPath = path.join(currentPath, entry.name);
           try {
             if (await this.isGitRepo(fullPath)) {
+              // 如果是git仓库，获取详细信息并添加到列表
               const repoInfo = await this.getRepoInfo(fullPath);
               this.gitRepos.push({
                 name: entry.name,
@@ -173,39 +181,43 @@ class GitPuller {
                 timestamp: new Date(),
                 ...repoInfo,
               });
+              logger.info(`发现 Git 仓库: ${entry.name}`);
             } else if (currentDepth < this.maxDepth) {
+              // 如果不是git仓库且未达到最大深度，继续递归
               await this.scanDirectories(fullPath, currentDepth + 1);
             }
           } catch (error) {
-            console.warn(`警告: 处理目录 ${fullPath} 时出错: ${error.message}`);
+            logger.warn(`警告: 处理目录 ${fullPath} 时出错: ${error.message}`);
           }
         }
       }
     } catch (error) {
-      console.error(`错误: 扫描目录 ${currentPath} 失败: ${error.message}`);
+      logger.error(`错误: 扫描目录 ${currentPath} 失败: ${error.message}`);
     }
   }
 
-  // 处理单个仓库
+  /**
+   * 更新单个仓库
+   * @param {Object} repo - 仓库信息对象
+   */
   async pullRepo(repo) {
-    console.log(`\n📁 正在处理仓库 ${repo.name}...`);
+    logger.info(`\n📁 正在处理仓库 ${repo.name}...`);
 
     try {
-      // 检查仓库状态
       if (!(await this.checkGitRepoStatus(repo))) {
         this.skippedRepos.push({ ...repo, reason: "仓库状态检查失败" });
         return;
       }
-
-      // 检查工作区状态
+      // 检查是否有未提交的更改
       const statusResult = await this.executeGitCommand(
         "git status --porcelain",
         repo.path
       );
       const hasChanges = statusResult.output.length > 0;
 
+      // 如果有未提交的更改，先暂存
       if (hasChanges) {
-        console.log(`发现未提交的更改，正在暂存 ${repo.name} 的更改...`);
+        logger.info(`发现未提交的更改，正在暂存 ${repo.name} 的更改...`);
         const stashResult = await this.executeGitCommand(
           "git stash --include-untracked",
           repo.path
@@ -215,24 +227,24 @@ class GitPuller {
         }
       }
 
-      // 执行pull
+      // 执行pull操作
       const pullResult = await this.executeGitCommand("git pull", repo.path);
 
-      // 恢复暂存的更改
+      // 如果之前有暂存的更改，现在恢复
       if (hasChanges) {
-        console.log(`正在恢复 ${repo.name} 的暂存更改...`);
+        logger.info(`正在恢复 ${repo.name} 的暂存更改...`);
         const popResult = await this.executeGitCommand(
           "git stash pop",
           repo.path
         );
         if (!popResult.success) {
-          console.warn(`警告: ${repo.name} 恢复暂存更改失败，请手动处理`);
+          logger.warn(`警告: ${repo.name} 恢复暂存更改失败，请手动处理`);
         }
       }
 
       if (pullResult.success) {
         this.successRepos.push(repo);
-        console.log(`✅ 更新成功: ${repo.name}\n${pullResult.output}`);
+        logger.success(`✅ 更新成功: ${repo.name}\n${pullResult.output}`);
       } else {
         throw new Error(pullResult.output);
       }
@@ -241,14 +253,18 @@ class GitPuller {
         ...repo,
         error: error.message,
       });
-      console.log(`❌ 更新失败: ${repo.name}\n${error.message}`);
+      logger.error(`❌ 更新失败: ${repo.name}\n${error.message}`);
     }
   }
 
-  // 生成报告
+  /**
+   * 生成执行报告
+   */
   generateReport() {
+    const duration = ((Date.now() - this.startTime) / 1000).toFixed(2);
     return {
       timestamp: new Date(),
+      duration: `${duration}秒`,
       totalRepos: this.gitRepos.length,
       successCount: this.successRepos.length,
       failureCount: this.failedRepos.length,
@@ -259,68 +275,76 @@ class GitPuller {
     };
   }
 
-  // 主运行方法
+  /**
+   * 主运行方法
+   */
   async run() {
-    console.log(`🔍 正在扫描Git仓库(最大深度: ${this.maxDepth})...`);
+    logger.info(`🔍 正在扫描Git仓库(最大深度: ${this.maxDepth})...`);
 
     try {
+      // 扫描目录
       await this.scanDirectories(process.cwd());
 
       if (this.gitRepos.length === 0) {
-        console.log("没有找到Git仓库！");
+        logger.warn("没有找到Git仓库！");
         return;
       }
 
-      console.log("\n找到以下Git仓库:");
+      // 显示找到的仓库信息
+      logger.info("\n找到以下Git仓库:");
       this.gitRepos.forEach((repo) => {
-        console.log(`\n- ${repo.name}`);
-        console.log(`  路径: ${repo.path}`);
-        console.log(`  远程仓库: ${repo.remoteUrl}`);
-        console.log(`  当前分支: ${repo.currentBranch}`);
-        console.log(`  最后提交: ${repo.lastCommit}`);
+        logger.info(`\n- ${repo.name}`);
+        logger.info(`  路径: ${repo.path}`);
+        logger.info(`  远程仓库: ${repo.remoteUrl}`);
+        logger.info(`  当前分支: ${repo.currentBranch}`);
+        logger.info(`  最后提交: ${repo.lastCommit}`);
       });
 
-      console.log("\n🔄 开始更新操作...");
-      // 串行执行以避免并发问题
+      // 开始更新操作
+      logger.info("\n🔄 开始更新操作...");
+      // 串行执行更新操作，避免并发问题
       for (const repo of this.gitRepos) {
         await this.pullRepo(repo);
       }
 
-      // 输出总结报告
+      // 生成和显示报告
       const report = this.generateReport();
-      console.log("\n📊 更新总结:");
-      console.log(`仓库总数: ${report.totalRepos}`);
-      console.log(`更新成功: ${report.successCount}`);
-      console.log(`更新失败: ${report.failureCount}`);
-      console.log(`已跳过: ${report.skippedCount}`);
+      logger.info("\n📊 更新总结:");
+      logger.info(`执行时间: ${report.duration}`);
+      logger.info(`仓库总数: ${report.totalRepos}`);
+      logger.success(`更新成功: ${report.successCount}`);
+      logger.error(`更新失败: ${report.failureCount}`);
+      logger.warn(`已跳过: ${report.skippedCount}`);
 
+      // 显示详细结果
       if (report.successCount > 0) {
-        console.log("\n✅ 更新成功的仓库:");
-        report.successRepos.forEach((repo) => console.log(`- ${repo.name}`));
+        logger.success("\n✅ 更新成功的仓库:");
+        report.successRepos.forEach((repo) => logger.success(`- ${repo.name}`));
       }
 
       if (report.failureCount > 0) {
-        console.log("\n❌ 更新失败的仓库:");
+        logger.error("\n❌ 更新失败的仓库:");
         report.failedRepos.forEach((repo) =>
-          console.log(`- ${repo.name} (原因: ${repo.error})`)
+          logger.error(`- ${repo.name} (原因: ${repo.error})`)
         );
       }
 
       if (report.skippedCount > 0) {
-        console.log("\n⏭️ 跳过的仓库:");
+        logger.warn("\n⏭️ 跳过的仓库:");
         report.skippedRepos.forEach((repo) =>
-          console.log(`- ${repo.name} (原因: ${repo.reason})`)
+          logger.warn(`- ${repo.name} (原因: ${repo.reason})`)
         );
       }
     } catch (error) {
-      console.error("程序执行过程中发生错误:", error);
+      logger.error("程序执行过程中发生错误:", error);
       process.exit(1);
     }
   }
 }
 
-// 参数验证和使用示例
+// 主程序入口
 try {
+  // 获取命令行参数中的递归深度
   const depth = process.argv[2] ? parseInt(process.argv[2]) : 1;
   if (isNaN(depth) || depth < 1) {
     throw new Error("递归深度必须是大于0的数字");
@@ -328,10 +352,10 @@ try {
 
   const puller = new GitPuller(depth);
   puller.run().catch((error) => {
-    console.error("程序执行失败:", error);
+    logger.error("程序执行失败:", error);
     process.exit(1);
   });
 } catch (error) {
-  console.error("参数错误:", error.message);
+  logger.error("参数错误:", error.message);
   process.exit(1);
 }
