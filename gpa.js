@@ -17,127 +17,93 @@
 // 11. 输出pull成功的仓库名称
 
 
-const fs = require('fs').promises;
+const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-class GitPuller {
-    constructor(maxDepth = 1) {
-        this.maxDepth = maxDepth;
-        this.successRepos = [];
-        this.failedRepos = [];
-    }
+// 控制递归深度，默认为1
+const RECURSION_DEPTH = process.argv[2] ? parseInt(process.argv[2]) : 1;
 
-    async isGitRepo(dirPath) {
-        try {
-            const gitDir = path.join(dirPath, '.git');
-            await fs.access(gitDir);
-            return true;
-        } catch {
-            return false;
-        }
-    }
+// 存储所有 Git 仓库的信息
+const gitRepos = [];
 
-    async getAllDirs(currentPath, currentDepth = 0) {
-        if (currentDepth > this.maxDepth) return [];
+// 读取文件夹并判断是否为 Git 仓库
+function readFolders(dir, currentDepth = 0) {
+    if (currentDepth > RECURSION_DEPTH) return;
 
-        const entries = await fs.readdir(currentPath, { withFileTypes: true });
-        let dirs = [];
+    const items = fs.readdirSync(dir, { withFileTypes: true });
 
-        for (const entry of entries) {
-            if (entry.isDirectory()) {
-                const fullPath = path.join(currentPath, entry.name);
-                dirs.push(fullPath);
-                if (currentDepth < this.maxDepth) {
-                    const subdirs = await this.getAllDirs(fullPath, currentDepth + 1);
-                    dirs = dirs.concat(subdirs);
-                }
+    for (const item of items) {
+        if (item.isDirectory()) {
+            const fullPath = path.join(dir, item.name);
+            const gitDir = path.join(fullPath, '.git');
+
+            // 判断是否为 Git 仓库
+            if (fs.existsSync(gitDir)) {
+                gitRepos.push(fullPath);
+            } else {
+                readFolders(fullPath, currentDepth + 1);
             }
-        }
-
-        return dirs;
-    }
-
-    async gitPull(repoPath) {
-        try {
-            console.log(`\n处理仓库: ${repoPath}`);
-
-            // 检查是否有未提交的更改
-            const status = execSync('git status --porcelain', { cwd: repoPath }).toString();
-
-            if (status) {
-                console.log('发现未提交的更改，执行 stash...');
-                execSync('git stash -u', { cwd: repoPath });
-            }
-
-            // 执行 git pull
-            const pullResult = execSync('git pull', { cwd: repoPath }).toString();
-            console.log('Pull 结果:', pullResult);
-
-            // 如果之前有 stash，现在恢复
-            if (status) {
-                console.log('恢复 stash...');
-                execSync('git stash pop', { cwd: repoPath });
-            }
-
-            this.successRepos.push({
-                path: repoPath,
-                name: path.basename(repoPath)
-            });
-            return true;
-        } catch (error) {
-            console.error(`Pull 失败: ${error.message}`);
-            this.failedRepos.push({
-                path: repoPath,
-                name: path.basename(repoPath)
-            });
-            return false;
-        }
-    }
-
-    async run() {
-        try {
-            const currentDir = process.cwd();
-            const allDirs = await this.getAllDirs(currentDir);
-            const gitRepos = [];
-
-            // 找出所有 git 仓库
-            for (const dir of allDirs) {
-                if (await this.isGitRepo(dir)) {
-                    gitRepos.push(dir);
-                    console.log(`发现 git 仓库: ${dir}`);
-                }
-            }
-
-            console.log(`\n共发现 ${gitRepos.length} 个 git 仓库`);
-
-            // 执行 git pull
-            for (const repo of gitRepos) {
-                await this.gitPull(repo);
-            }
-
-            // 输出结果统计
-            console.log('\n=== 执行结果统计 ===');
-            console.log(`成功数量: ${this.successRepos.length}`);
-            console.log(`失败数量: ${this.failedRepos.length}`);
-
-            if (this.successRepos.length > 0) {
-                console.log('\n成功的仓库:');
-                this.successRepos.forEach(repo => console.log(`- ${repo.name} (${repo.path})`));
-            }
-
-            if (this.failedRepos.length > 0) {
-                console.log('\n失败的仓库:');
-                this.failedRepos.forEach(repo => console.log(`- ${repo.name} (${repo.path})`));
-            }
-
-        } catch (error) {
-            console.error('执行过程中发生错误:', error);
         }
     }
 }
 
-// 使用方法
-const depth = process.argv[2] ? parseInt(process.argv[2]) : 1;
-const puller = new GitPuller(depth);
-puller.run();
+// 执行 git pull 操作
+function gitPull(repoPath) {
+    try {
+        // 检查是否有未提交的文件
+        const status = execSync('git status --porcelain', { cwd: repoPath }).toString();
+
+        if (status) {
+            // 如果有未提交的文件，先 stash
+            execSync('git stash push -u', { cwd: repoPath });
+        }
+
+        // 执行 git pull
+        const pullResult = execSync('git pull', { cwd: repoPath }).toString();
+
+        // 如果之前 stash 了，现在 pop
+        if (status) {
+            execSync('git stash pop', { cwd: repoPath });
+        }
+
+        return { success: true, repoPath, result: pullResult };
+    } catch (error) {
+        return { success: false, repoPath, error: error.message };
+    }
+}
+
+// 主函数
+function main() {
+    const currentDir = process.cwd();
+
+    console.log(`Reading folders in: ${currentDir}`);
+    readFolders(currentDir);
+
+    console.log(`Found ${gitRepos.length} Git repositories:`);
+    console.log(gitRepos.map(repo => path.relative(currentDir, repo)).join('\n'));
+
+    const results = gitRepos.map(repoPath => gitPull(repoPath));
+
+    const successfulRepos = results.filter(result => result.success);
+    const failedRepos = results.filter(result => !result.success);
+
+    console.log('\nPull results:');
+    results.forEach(result => {
+        if (result.success) {
+            console.log(`✅ ${path.relative(currentDir, result.repoPath)}`);
+            console.log(result.result);
+        } else {
+            console.log(`❌ ${path.relative(currentDir, result.repoPath)}`);
+            console.log(`Error: ${result.error}`);
+        }
+    });
+
+    console.log(`\nPull successful for ${successfulRepos.length} repositories:`);
+    successfulRepos.forEach(repo => console.log(`- ${path.relative(currentDir, repo.repoPath)}`));
+
+    console.log(`\nPull failed for ${failedRepos.length} repositories:`);
+    failedRepos.forEach(repo => console.log(`- ${path.relative(currentDir, repo.repoPath)}`));
+}
+
+main();
