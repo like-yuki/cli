@@ -17,88 +17,127 @@
 // 11. 输出pull成功的仓库名称
 
 
-const fs = require('fs');
+const fs = require('fs').promises;
 const path = require('path');
 const { execSync } = require('child_process');
 
-function listDirectories(baseDir, depth = 1, currentDepth = 0) {
-  if (currentDepth > depth) return [];
-
-  const entries = fs.readdirSync(baseDir, { withFileTypes: true });
-  let directories = [];
-
-  for (const entry of entries) {
-    const fullPath = path.join(baseDir, entry.name);
-    if (entry.isDirectory()) {
-      directories.push(fullPath);
-      directories = directories.concat(listDirectories(fullPath, depth, currentDepth + 1));
+class GitPuller {
+    constructor(maxDepth = 1) {
+        this.maxDepth = maxDepth;
+        this.successRepos = [];
+        this.failedRepos = [];
     }
-  }
 
-  return directories;
+    async isGitRepo(dirPath) {
+        try {
+            const gitDir = path.join(dirPath, '.git');
+            await fs.access(gitDir);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    async getAllDirs(currentPath, currentDepth = 0) {
+        if (currentDepth > this.maxDepth) return [];
+
+        const entries = await fs.readdir(currentPath, { withFileTypes: true });
+        let dirs = [];
+
+        for (const entry of entries) {
+            if (entry.isDirectory()) {
+                const fullPath = path.join(currentPath, entry.name);
+                dirs.push(fullPath);
+                if (currentDepth < this.maxDepth) {
+                    const subdirs = await this.getAllDirs(fullPath, currentDepth + 1);
+                    dirs = dirs.concat(subdirs);
+                }
+            }
+        }
+
+        return dirs;
+    }
+
+    async gitPull(repoPath) {
+        try {
+            console.log(`\n处理仓库: ${repoPath}`);
+
+            // 检查是否有未提交的更改
+            const status = execSync('git status --porcelain', { cwd: repoPath }).toString();
+
+            if (status) {
+                console.log('发现未提交的更改，执行 stash...');
+                execSync('git stash -u', { cwd: repoPath });
+            }
+
+            // 执行 git pull
+            const pullResult = execSync('git pull', { cwd: repoPath }).toString();
+            console.log('Pull 结果:', pullResult);
+
+            // 如果之前有 stash，现在恢复
+            if (status) {
+                console.log('恢复 stash...');
+                execSync('git stash pop', { cwd: repoPath });
+            }
+
+            this.successRepos.push({
+                path: repoPath,
+                name: path.basename(repoPath)
+            });
+            return true;
+        } catch (error) {
+            console.error(`Pull 失败: ${error.message}`);
+            this.failedRepos.push({
+                path: repoPath,
+                name: path.basename(repoPath)
+            });
+            return false;
+        }
+    }
+
+    async run() {
+        try {
+            const currentDir = process.cwd();
+            const allDirs = await this.getAllDirs(currentDir);
+            const gitRepos = [];
+
+            // 找出所有 git 仓库
+            for (const dir of allDirs) {
+                if (await this.isGitRepo(dir)) {
+                    gitRepos.push(dir);
+                    console.log(`发现 git 仓库: ${dir}`);
+                }
+            }
+
+            console.log(`\n共发现 ${gitRepos.length} 个 git 仓库`);
+
+            // 执行 git pull
+            for (const repo of gitRepos) {
+                await this.gitPull(repo);
+            }
+
+            // 输出结果统计
+            console.log('\n=== 执行结果统计 ===');
+            console.log(`成功数量: ${this.successRepos.length}`);
+            console.log(`失败数量: ${this.failedRepos.length}`);
+
+            if (this.successRepos.length > 0) {
+                console.log('\n成功的仓库:');
+                this.successRepos.forEach(repo => console.log(`- ${repo.name} (${repo.path})`));
+            }
+
+            if (this.failedRepos.length > 0) {
+                console.log('\n失败的仓库:');
+                this.failedRepos.forEach(repo => console.log(`- ${repo.name} (${repo.path})`));
+            }
+
+        } catch (error) {
+            console.error('执行过程中发生错误:', error);
+        }
+    }
 }
 
-function isGitRepository(directory) {
-  const gitPath = path.join(directory, '.git');
-  return fs.existsSync(gitPath) && fs.lstatSync(gitPath).isDirectory();
-}
-
-function executeShellCommand(command, cwd) {
-  try {
-    return execSync(command, { cwd, stdio: 'pipe' }).toString().trim();
-  } catch (error) {
-    return { error: error.message };
-  }
-}
-
-function main(recursionDepth = 1) {
-  const baseDir = process.cwd();
-  const allDirectories = listDirectories(baseDir, recursionDepth);
-
-  const gitRepos = allDirectories.filter(isGitRepository);
-  const nonGitRepos = allDirectories.filter(dir => !isGitRepository(dir));
-
-  console.log('Git Repositories:\n', gitRepos.join('\n'));
-  console.log('Non-Git Directories:\n', nonGitRepos.join('\n'));
-
-  let successfulPulls = [];
-  let failedPulls = [];
-
-  for (const repo of gitRepos) {
-    console.log(`Processing: ${repo}`);
-    let stashRequired = false;
-
-    const statusOutput = executeShellCommand('git status --porcelain', repo);
-    if (statusOutput && !statusOutput.error) {
-      stashRequired = statusOutput.length > 0;
-    }
-
-    if (stashRequired) {
-      executeShellCommand('git stash push -u', repo);
-    }
-
-    const pullOutput = executeShellCommand('git pull', repo);
-
-    if (stashRequired) {
-      executeShellCommand('git stash pop', repo);
-    }
-
-    if (pullOutput.error) {
-      console.log(`Failed to pull in ${repo}: ${pullOutput.error}`);
-      failedPulls.push(repo);
-    } else {
-      console.log(`Success: ${pullOutput}`);
-      successfulPulls.push(repo);
-    }
-  }
-
-  console.log('\n=== Summary ===');
-  console.log(`Successful Pulls (${successfulPulls.length}):`);
-  console.log(successfulPulls.join('\n'));
-
-  console.log(`\nFailed Pulls (${failedPulls.length}):`);
-  console.log(failedPulls.join('\n'));
-}
-
-const recursionDepth = parseInt(process.argv[2]) || 1;
-main(recursionDepth);
+// 使用方法
+const depth = process.argv[2] ? parseInt(process.argv[2]) : 1;
+const puller = new GitPuller(depth);
+puller.run();
