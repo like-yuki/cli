@@ -16,9 +16,9 @@ const logger = {
 };
 
 class GitPuller {
-  constructor(maxDepth = 1) {
-    // 限制递归深度在1-10之间
-    this.maxDepth = Math.max(1, Math.min(10, parseInt(maxDepth) || 1));
+  constructor(maxDepth = 0) {
+    // 限制递归深度在0-10之间
+    this.maxDepth = Math.max(1, Math.min(10, parseInt(maxDepth) || 0));
     this.gitRepos = []; // 存储发现的所有git仓库
     this.successRepos = []; // 成功更新的仓库
     this.failedRepos = []; // 更新失败的仓库
@@ -154,7 +154,7 @@ class GitPuller {
    * @param {string} currentPath - 当前扫描的路径
    * @param {number} currentDepth - 当前递归深度
    */
-  async scanDirectories(currentPath, currentDepth = 0) {
+  async scanDirectories(currentPath, currentDepth = 1) {
     if (currentDepth > this.maxDepth) return;
 
     try {
@@ -283,7 +283,7 @@ class GitPuller {
 
     try {
       // 扫描目录
-      await this.scanDirectories(process.cwd());
+      await this.scanDirectories(process.cwd(),1);
 
       if (this.gitRepos.length === 0) {
         logger.warn("没有找到Git仓库！");
@@ -345,8 +345,8 @@ class GitPuller {
 // 主程序入口
 try {
   // 获取命令行参数中的递归深度
-  const depth = process.argv[2] ? parseInt(process.argv[2]) : 1;
-  if (isNaN(depth) || depth < 1) {
+  const depth = process.argv[2] ? parseInt(process.argv[2]) : 0;
+  if (isNaN(depth) || depth < 0) {
     throw new Error("递归深度必须是大于0的数字");
   }
 
