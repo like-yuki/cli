@@ -17,132 +17,88 @@
 // 11. 输出pull成功的仓库名称
 
 
-
-const fs = require('fs').promises;
+const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// 检查是否为git仓库
-function isGitRepo(dir) {
-    try {
-        execSync('git rev-parse --is-inside-work-tree', { cwd: dir, stdio: 'ignore' });
-        return true;
-    } catch (e) {
-        return false;
+function listDirectories(baseDir, depth = 1, currentDepth = 0) {
+  if (currentDepth > depth) return [];
+
+  const entries = fs.readdirSync(baseDir, { withFileTypes: true });
+  let directories = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(baseDir, entry.name);
+    if (entry.isDirectory()) {
+      directories.push(fullPath);
+      directories = directories.concat(listDirectories(fullPath, depth, currentDepth + 1));
     }
+  }
+
+  return directories;
 }
 
-// 执行git命令
-function execGitCommand(command, dir) {
-    try {
-        return execSync(command, { cwd: dir, encoding: 'utf8' });
-    } catch (e) {
-        throw new Error(`执行命令失败: ${command}\n${e.message}`);
-    }
+function isGitRepository(directory) {
+  const gitPath = path.join(directory, '.git');
+  return fs.existsSync(gitPath) && fs.lstatSync(gitPath).isDirectory();
 }
 
-// 处理单个git仓库
-async function handleGitRepo(dir) {
-    try {
-        // 检查git状态
-        const status = execGitCommand('git status --porcelain', dir);
-
-        // 如果有未提交的更改，执行stash
-        if (status) {
-            execGitCommand('git stash --include-untracked', dir);
-        }
-
-        // 执行git pull
-        const pullResult = execGitCommand('git pull', dir);
-
-        // 如果之前有stash，恢复stash
-        if (status) {
-            execGitCommand('git stash pop', dir);
-        }
-
-        return {
-            success: true,
-            message: pullResult,
-            repo: path.basename(dir)
-        };
-    } catch (error) {
-        return {
-            success: false,
-            message: error.message,
-            repo: path.basename(dir)
-        };
-    }
+function executeShellCommand(command, cwd) {
+  try {
+    return execSync(command, { cwd, stdio: 'pipe' }).toString().trim();
+  } catch (error) {
+    return { error: error.message };
+  }
 }
 
-// 主函数
-async function gitPullAll(baseDir = '.', depth = 1) {
-    const results = {
-        successful: [],
-        failed: [],
-    };
+function main(recursionDepth = 1) {
+  const baseDir = process.cwd();
+  const allDirectories = listDirectories(baseDir, recursionDepth);
 
-    async function scanDirectory(currentDir, currentDepth) {
-        if (currentDepth > depth) return;
+  const gitRepos = allDirectories.filter(isGitRepository);
+  const nonGitRepos = allDirectories.filter(dir => !isGitRepository(dir));
 
-        const entries = await fs.readdir(currentDir, { withFileTypes: true });
+  console.log('Git Repositories:\n', gitRepos.join('\n'));
+  console.log('Non-Git Directories:\n', nonGitRepos.join('\n'));
 
-        for (const entry of entries) {
-            if (!entry.isDirectory()) continue;
+  let successfulPulls = [];
+  let failedPulls = [];
 
-            const fullPath = path.join(currentDir, entry.name);
+  for (const repo of gitRepos) {
+    console.log(`Processing: ${repo}`);
+    let stashRequired = false;
 
-            if(['node_modules', '.git', 'dist'].includes(entry.name)) continue;
-
-            if (isGitRepo(fullPath)) {
-                console.log(`处理仓库: ${entry.name}`);
-                const result = await handleGitRepo(fullPath);
-
-                if (result.success) {
-                    results.successful.push(result);
-                } else {
-                    results.failed.push(result);
-                }
-            } else {
-                console.log(`跳过非git仓库: ${entry.name}`);
-                // 继续递归搜索子目录
-                await scanDirectory(fullPath, currentDepth + 1);
-            }
-        }
+    const statusOutput = executeShellCommand('git status --porcelain', repo);
+    if (statusOutput && !statusOutput.error) {
+      stashRequired = statusOutput.length > 0;
     }
 
-    await scanDirectory(baseDir, 1);
-
-    // 输出结果统计
-    console.log('\n=== 执行结果统计 ===');
-    console.log(`成功数量: ${results.successful.length}`);
-    console.log(`失败数量: ${results.failed.length}`);
-
-    if (results.successful.length > 0) {
-        console.log('\n成功的仓库:');
-        results.successful.forEach(result => {
-            console.log(`✅ ${result.repo}`);
-            console.log(result.message);
-        });
+    if (stashRequired) {
+      executeShellCommand('git stash push -u', repo);
     }
 
-    if (results.failed.length > 0) {
-        console.log('\n失败的仓库:');
-        results.failed.forEach(result => {
-            console.log(`❌ ${result.repo}`);
-            console.log(result.message);
-        });
+    const pullOutput = executeShellCommand('git pull', repo);
+
+    if (stashRequired) {
+      executeShellCommand('git stash pop', repo);
     }
 
-    return results;
+    if (pullOutput.error) {
+      console.log(`Failed to pull in ${repo}: ${pullOutput.error}`);
+      failedPulls.push(repo);
+    } else {
+      console.log(`Success: ${pullOutput}`);
+      successfulPulls.push(repo);
+    }
+  }
+
+  console.log('\n=== Summary ===');
+  console.log(`Successful Pulls (${successfulPulls.length}):`);
+  console.log(successfulPulls.join('\n'));
+
+  console.log(`\nFailed Pulls (${failedPulls.length}):`);
+  console.log(failedPulls.join('\n'));
 }
 
-// 命令行参数处理
-const args = process.argv.slice(2);
-const dir = args[0] || '.';
-const depth = parseInt(args[1]) || 1;
-
-// 执行脚本
-gitPullAll(dir, depth).catch(error => {
-    console.error('执行出错:', error);
-    process.exit(1);
-});
+const recursionDepth = parseInt(process.argv[2]) || 1;
+main(recursionDepth);
