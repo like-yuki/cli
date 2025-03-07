@@ -1,0 +1,15 @@
+{
+  "maxDepth": 1,
+  "verbose": false,
+  "parallel": false,
+  "concurrentLimit": 5,
+  "retryCount": 3,
+  "retryDelay": 1000,
+  "exclude": [
+    ".git",
+    "node_modules",
+    "dist",
+    "build"
+  ],
+  "timeout": 30000
+}
