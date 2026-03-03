@@ -6,7 +6,8 @@
   "typings": "index.d.ts",
   "bin": {
     "lk": "index.js",
-    "lk-gpa": "gpa.js"
+    "lk-gpa": "gpa.js",
+    "lk-pp": "pp.js"
   },
   "type": "module",
   "scripts": {
