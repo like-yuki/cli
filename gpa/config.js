@@ -1,14 +1,13 @@
+import os from "os";
+import path from "path";
 import { promises as fs } from "fs";
-import {
-  CONFIG_DIR,
-  CONFIG_FILE,
-  CONFIG_SCOPE,
-} from "./constants.js";
+import { CONFIG_DIR, CONFIG_FILE, CONFIG_SCOPE } from "./constants.js";
 
-export const getTargetsSignature = (targets) => JSON.stringify(targets || []);
+const configDir = path.join(os.homedir(), CONFIG_DIR);
+const configFile = path.join(configDir, CONFIG_FILE);
 
 const ensureConfigDir = async () => {
-  await fs.mkdir(CONFIG_DIR, { recursive: true });
+  await fs.mkdir(configDir, { recursive: true });
 };
 
 const createFileHandle = async (filePath, flags) => {
@@ -23,7 +22,7 @@ const createFileHandle = async (filePath, flags) => {
 
 export const loadConfig = async () => {
   try {
-    await using fileResource = await createFileHandle(CONFIG_FILE, "r");
+    await using fileResource = await createFileHandle(configFile, "r");
     const raw = await fileResource.handle.readFile({ encoding: "utf-8" });
     return JSON.parse(raw);
   } catch {
@@ -31,19 +30,9 @@ export const loadConfig = async () => {
   }
 };
 
-export const saveConfig = async (config, logger, options = {}) => {
+export const saveConfig = async (config) => {
   await ensureConfigDir();
-  if (options.backup !== false) {
-    try {
-      const stat = await fs.stat(CONFIG_FILE);
-      if (stat.isFile()) {
-        const backupPath = `${CONFIG_FILE}.bak`;
-        await fs.copyFile(CONFIG_FILE, backupPath);
-        logger?.info?.(`配置已备份: ${backupPath}`);
-      }
-    } catch {}
-  }
-  await using fileResource = await createFileHandle(CONFIG_FILE, "w");
+  await using fileResource = await createFileHandle(configFile, "w");
   await fileResource.handle.writeFile(JSON.stringify(config, null, 2), "utf-8");
 };
 
@@ -69,13 +58,16 @@ const ensureScope = (root) => {
   if (Object.prototype.hasOwnProperty.call(root, CONFIG_SCOPE)) {
     return root;
   }
-  return { ...root, [CONFIG_SCOPE]: { default: null, repos: {} } };
+  return { ...root, [CONFIG_SCOPE]: { skipDirs: [] } };
 };
 
 const normalizeScope = (scoped) => ({
-  default: scoped.default || null,
-  repos: scoped.repos || {},
-  state: scoped.state || {},
+  skipDirs: Array.isArray(scoped.skipDirs) ? scoped.skipDirs : [],
+  skipMode: typeof scoped.skipMode === "string" ? scoped.skipMode : null,
+  commands: Array.isArray(scoped.commands) ? scoped.commands : [],
+  timeoutMs: Number.isFinite(scoped.timeoutMs)
+    ? scoped.timeoutMs
+    : null,
 });
 
 export const normalizeConfigShape = (config) => {
@@ -84,21 +76,16 @@ export const normalizeConfigShape = (config) => {
   const scopedRoot = ensureScope(migrated);
   const normalizedScope = normalizeScope(scopedRoot[CONFIG_SCOPE]);
 
+  if (!normalizedScope.skipMode) {
+    if (normalizedScope.skipDirs.length > 0) {
+      normalizedScope.skipMode = "custom";
+    } else {
+      normalizedScope.skipMode = "default";
+    }
+  }
+
   return {
     root: { ...scopedRoot, [CONFIG_SCOPE]: normalizedScope },
     scope: CONFIG_SCOPE,
   };
-};
-
-export const getScopedConfig = (rootConfig) => rootConfig[CONFIG_SCOPE];
-
-export const saveResumeState = async (rootConfig, repoKey, state, logger) => {
-  const scopedConfig = getScopedConfig(rootConfig);
-  scopedConfig.state = scopedConfig.state || {};
-  if (state) {
-    scopedConfig.state[repoKey] = state;
-  } else {
-    delete scopedConfig.state[repoKey];
-  }
-  await saveConfig(rootConfig, logger, { backup: false });
 };

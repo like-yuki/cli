@@ -16,6 +16,14 @@
 lk-pp
 ```
 
+```bash
+lk-pp -n
+```
+
+```bash
+lk-pp --no-verify
+```
+
 ### 计划模式
 
 ```bash
@@ -46,6 +54,78 @@ lk-pp --config
 
 ```bash
 lk-pp --edit
+```
+
+## lk-gpa
+
+扫描指定目录下的 Git 仓库并依次执行 `git pull`。
+
+```bash
+lk-gpa
+```
+
+```bash
+lk-gpa 2
+```
+
+```bash
+lk-gpa --detail
+```
+
+```bash
+lk-gpa --skip node_modules,dist
+```
+
+```bash
+lk-gpa --skip-only dist,coverage
+```
+
+```bash
+lk-gpa --skip-none
+```
+
+```bash
+lk-gpa --skip node_modules --skip dist
+```
+
+```bash
+lk-gpa --config
+```
+
+```bash
+lk-gpa --config --add node_modules,dist
+```
+
+```bash
+lk-gpa --config --remove dist
+```
+
+```bash
+lk-gpa --config --default
+```
+
+```bash
+lk-gpa --config --none
+```
+
+```bash
+lk-gpa --timeout 60000
+```
+
+```bash
+lk-gpa --show-config
+```
+
+```bash
+lk-gpa --resume
+```
+
+```bash
+lk-gpa --resume --force
+```
+
+```bash
+lk-gpa --help
 ```
 
 ### 修改默认配置

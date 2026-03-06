@@ -5,6 +5,7 @@ export const CLI_NAME = "lk-pp";
 export const CONFIG_SCOPE = "lk-pp";
 export const CONFIG_DIR = path.join(os.homedir(), ".config", "like-yuki-cli");
 export const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
+export const STATE_FILE = path.join(CONFIG_DIR, "pp-state.json");
 
 export const DEFAULT_MERGE_STRATEGY = "--no-ff";
 export const VALID_MERGE_STRATEGIES = new Set([
@@ -32,6 +33,7 @@ export const MESSAGES = {
 export const usageLines = (cliName) => [
   `${cliName} 用法:`,
   `  ${cliName}               执行合并并推送`,
+  `  ${cliName} -n | --no-verify    commit 时追加 -n`,
   `  ${cliName} --dry-run     演练运行，不执行变更但会校验远端`,
   `  ${cliName} --plan        仅输出命令，不做远端校验`,
   `  ${cliName} --config      修改当前仓库配置`,

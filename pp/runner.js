@@ -1,5 +1,10 @@
 import path from "path";
 import {
+  loadState,
+  saveState,
+  clearState,
+} from "./state.js";
+import {
   CLI_NAME,
   CONFIG_SCOPE,
   DEFAULT_MERGE_STRATEGY,
@@ -12,7 +17,6 @@ import {
   loadConfig,
   normalizeConfigShape,
   saveConfig,
-  saveResumeState,
 } from "./config.js";
 import {
   promptConfigInput,
@@ -357,7 +361,14 @@ const showRepoConfig = async (repoKey, repoRoot, logger) => {
   logger.info(JSON.stringify(output, null, 2));
 };
 
-const maybeCommitAndPush = async (runGit, logger, remoteName, sourceBranch, mode) => {
+const maybeCommitAndPush = async (
+  runGit,
+  logger,
+  remoteName,
+  sourceBranch,
+  mode,
+  noVerify
+) => {
   const status = await getWorkingTreeStatus(runGit);
   if (status.length === 0) {
     return;
@@ -371,7 +382,10 @@ const maybeCommitAndPush = async (runGit, logger, remoteName, sourceBranch, mode
     if (unstaged || !staged) {
       await runGit(["add", "-A"]);
     }
-    await runGit(["commit", "-m", message]);
+    const commitArgs = noVerify
+      ? ["commit", "-n", "-m", message]
+      : ["commit", "-m", message];
+    await runGit(commitArgs);
     await runGit(["push", remoteName, sourceBranch]);
     return;
   }
@@ -393,7 +407,9 @@ const maybeCommitAndPush = async (runGit, logger, remoteName, sourceBranch, mode
     }
   }
 
-  const commitResult = await runGit(["commit", "-m", message]);
+  const commitResult = await runGit(
+    noVerify ? ["commit", "-n", "-m", message] : ["commit", "-m", message]
+  );
   if (!commitResult.success) {
     throw new Error(`提交失败: ${commitResult.output}`);
   }
@@ -487,6 +503,7 @@ export const run = async (logger, argv) => {
 
   const dryRun = args.includes("--dry-run");
   const planOnly = args.includes("--plan");
+  const noVerify = args.includes("--no-verify") || args.includes("-n");
   const resume = args.includes("--resume");
   if (dryRun && planOnly) {
     throw new Error("--dry-run 与 --plan 不能同时使用");
@@ -517,7 +534,12 @@ export const run = async (logger, argv) => {
   await ensureGitRepo(runGit);
 
   const { repoConfig, rootConfig } = await ensureConfig(repoKey, repoRoot, logger);
+  if (rootConfig?.[CONFIG_SCOPE]?.state && Object.keys(rootConfig[CONFIG_SCOPE].state).length > 0) {
+    rootConfig[CONFIG_SCOPE].state = {};
+    await saveConfig(rootConfig, logger, { backup: false });
+  }
   const originalBranch = await getCurrentBranch(runGit);
+  const state = await loadState();
   const sourceBranch = await maybeCreateBranch(
     runGit,
     logger,
@@ -525,7 +547,14 @@ export const run = async (logger, argv) => {
     originalBranch,
     mode
   );
-  await maybeCommitAndPush(runGit, logger, repoConfig.remoteName, sourceBranch, mode);
+  await maybeCommitAndPush(
+    runGit,
+    logger,
+    repoConfig.remoteName,
+    sourceBranch,
+    mode,
+    noVerify
+  );
 
   logger.info(`当前分支: ${sourceBranch}`);
   logger.info(`远端: ${repoConfig.remoteName}`);
@@ -559,7 +588,7 @@ export const run = async (logger, argv) => {
   let hasConflict = false;
   const shouldReturnToOriginal = originalBranch === sourceBranch;
   try {
-    const resumeState = rootConfig?.[CONFIG_SCOPE]?.state?.[repoKey] || null;
+    const resumeState = state || null;
     const targetsSignature = getTargetsSignature(repoConfig.targetBranches);
     let startIndex = 0;
     if (resume && resumeState) {
@@ -591,26 +620,27 @@ export const run = async (logger, argv) => {
 
     for (let i = startIndex; i < targets.length; i += 1) {
       const targetBranch = targets[i];
-      if (shouldWriteState(mode) && rootConfig) {
-        await saveResumeState(rootConfig, repoKey, {
+      if (shouldWriteState(mode)) {
+        await saveState({
           targetBranch,
           sourceBranch,
           targetsSignature,
-        }, logger);
+        });
       }
       await mergeIntoBranch(runGit, sourceBranch, targetBranch, repoConfig, mode);
-      if (shouldWriteState(mode) && rootConfig) {
-        await saveResumeState(rootConfig, repoKey, null, logger);
+      if (shouldWriteState(mode)) {
+        await clearState();
       }
     }
   } catch (error) {
     hasConflict = await hasMergeConflict(runGit);
     throw error;
   } finally {
-    if (!hasConflict && shouldReturnToOriginal) {
-      const backResult = await runGit(["checkout", originalBranch]);
+    if (!hasConflict) {
+      const targetBranch = shouldReturnToOriginal ? originalBranch : sourceBranch;
+      const backResult = await runGit(["checkout", targetBranch]);
       if (backResult.success) {
-        logger.info(`已切回分支: ${originalBranch}`);
+        logger.info(`已切回分支: ${targetBranch}`);
       } else {
         logger.warn(`切回分支失败: ${backResult.output}`);
       }
