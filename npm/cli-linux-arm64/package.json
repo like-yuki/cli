@@ -1,0 +1,15 @@
+{
+  "name": "@like-yuki/cli-linux-arm64",
+  "version": "0.0.2-rc.6",
+  "description": "@like-yuki/cli platform-specific binary for linux-arm64",
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/like-yuki/cli.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

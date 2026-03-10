@@ -1,7 +1,6 @@
-# This workflow will run tests using node and then publish a package to GitHub Packages when a release is created
-# For more information see: https://docs.github.com/en/actions/publishing-packages/publishing-nodejs-packages
+# Build platform-specific binaries with Bun, then publish to npm.
 
-name: Node.js Package
+name: Build & Publish
 
 on:
   workflow_dispatch:
@@ -10,36 +9,79 @@ on:
       - master
     paths:
       - '**.js'
-  # schedule:
-  #   - cron: '00 23 * * 1,4'
-
-# on:
-#  release:
-#    types: [created]
 
 jobs:
-  # build:
-  # runs-on: ubuntu-latest
-  # steps:
-  #   - uses: actions/checkout@v4
-  #   - uses: actions/setup-node@v4
-  #     with:
-  #       node-version: 18
-  # - run: npm i
-  # - run: npm test
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: bun-linux-x64
+            npm_dir: cli-linux-x64
+          - os: ubuntu-latest
+            target: bun-linux-arm64
+            npm_dir: cli-linux-arm64
+          - os: macos-latest
+            target: bun-darwin-arm64
+            npm_dir: cli-darwin-arm64
+          - os: ubuntu-latest
+            target: bun-windows-x64
+            npm_dir: cli-win32-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
 
-  publish-npm:
-    # needs: build
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Build binaries for ${{ matrix.target }}
+        run: node scripts/build.js ${{ matrix.target }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.npm_dir }}
+          path: npm/${{ matrix.npm_dir }}/bin/
+
+  publish-platform:
+    needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 22
           registry-url: https://registry.npmjs.org/
 
-      - run: |
-          npm i
-          npm publish
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+
+      - name: Copy binaries to platform packages
+        run: |
+          for dir in cli-linux-x64 cli-linux-arm64 cli-darwin-arm64 cli-win32-x64; do
+            mkdir -p "npm/${dir}/bin"
+            cp -r "artifacts/${dir}/"* "npm/${dir}/bin/"
+            chmod +x npm/${dir}/bin/* 2>/dev/null || true
+          done
+
+      - name: Publish platform packages
+        run: node scripts/publish-platform.js
         env:
-          NPM_TOKEN: ${{secrets.NPM_TOKEN}}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-main:
+    needs: publish-platform
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+
+      - run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

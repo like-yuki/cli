@@ -5,13 +5,15 @@
   "main": "index.js",
   "typings": "index.d.ts",
   "bin": {
-    "lk": "index.js",
-    "lk-gpa": "gpa.js",
-    "lk-pp": "pp.js"
+    "lk": "bin/lk",
+    "lk-gpa": "bin/lk-gpa",
+    "lk-pp": "bin/lk-pp"
   },
   "type": "module",
   "scripts": {
     "lk": "node index.js",
+    "build": "node scripts/build.js",
+    "postinstall": "node scripts/install.js",
     "release": "release-it",
     "release:alpha": "release-it --preRelease=alpha",
     "release:beta": "release-it --preRelease=beta",
@@ -34,6 +36,12 @@
   "devDependencies": {
     "@types/node": "^18",
     "release-it": "^16"
+  },
+  "optionalDependencies": {
+    "@like-yuki/cli-linux-x64": "0.0.2-rc.6",
+    "@like-yuki/cli-linux-arm64": "0.0.2-rc.6",
+    "@like-yuki/cli-darwin-arm64": "0.0.2-rc.6",
+    "@like-yuki/cli-win32-x64": "0.0.2-rc.6"
   },
   "publishConfig": {
     "access": "public"
