@@ -1,45 +1,52 @@
 #!/usr/bin/env node
 
 /**
- * postinstall fallback: when optionalDependencies are skipped (e.g. --ignore-optional),
- * download the platform-specific package from npm and extract the binaries.
+ * postinstall: download platform binaries from GitHub Releases.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { accessSync, constants, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
 import { get } from "node:https";
-import { gunzipSync } from "node:zlib";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, "..");
-const require = createRequire(import.meta.url);
-
-const PLATFORMS = {
-  "linux-x64": "@like-yuki/cli-linux-x64",
-  "linux-arm64": "@like-yuki/cli-linux-arm64",
-  "darwin-arm64": "@like-yuki/cli-darwin-arm64",
-  "win32-x64": "@like-yuki/cli-win32-x64",
-};
-
 const BINARIES = ["lk", "lk-gpa", "lk-pp"];
 
-const platformKey = `${process.platform}-${process.arch}`;
-const pkgName = PLATFORMS[platformKey];
+const PLATFORMS = {
+  "linux-x64": "linux-x64",
+  "linux-arm64": "linux-arm64",
+  "darwin-arm64": "darwin-arm64",
+  "win32-x64": "win32-x64",
+};
 
-if (!pkgName) {
+const platformKey = `${process.platform}-${process.arch}`;
+const platform = PLATFORMS[platformKey];
+
+if (!platform) {
   console.warn(`[postinstall] Unsupported platform: ${platformKey}, skipping binary download.`);
   process.exit(0);
 }
 
 const isWindows = process.platform === "win32";
+const fileExt = isWindows ? ".exe" : "";
 
-function isPlatformPackageInstalled() {
+function parseRepoSlug(repoUrl) {
+  if (!repoUrl || typeof repoUrl !== "string") return null;
+  const cleaned = repoUrl
+    .replace(/^git\+/, "")
+    .replace(/^git@github\.com:/, "https://github.com/")
+    .replace(/\.git$/, "");
+  const match = cleaned.match(/github\.com\/([^/]+\/[^/]+)$/);
+  return match ? match[1] : null;
+}
+
+function isBinaryReady() {
   for (const bin of BINARIES) {
-    const binName = isWindows ? `${bin}.exe` : bin;
+    const binName = `${bin}${fileExt}`;
     try {
-      require.resolve(`${pkgName}/bin/${binName}`);
+      const filepath = join(rootDir, binName);
+      accessSync(filepath, constants.X_OK);
     } catch {
       return false;
     }
@@ -47,15 +54,22 @@ function isPlatformPackageInstalled() {
   return true;
 }
 
-if (isPlatformPackageInstalled()) {
+if (isBinaryReady()) {
   process.exit(0);
 }
 
-console.log(`[postinstall] Platform package not found, downloading ${pkgName}...`);
-
 const pkg = JSON.parse(readFileSync(join(rootDir, "package.json"), "utf-8"));
 const version = pkg.version;
-const shortName = pkgName.replace("@like-yuki/", "");
+const repoSlug = parseRepoSlug(pkg.repository?.url);
+
+if (!repoSlug) {
+  console.warn("[postinstall] Invalid repository url in package.json, skip binary download.");
+  process.exit(0);
+}
+
+console.log(
+  `[postinstall] Downloading binaries from GitHub Releases (${repoSlug}, ${platformKey}, v${version})...`
+);
 
 function fetch(url) {
   return new Promise((resolve, reject) => {
@@ -74,51 +88,34 @@ function fetch(url) {
   });
 }
 
-function extractFromTarball(tarBuffer, filepath) {
-  let offset = 0;
-  while (offset < tarBuffer.length) {
-    const header = tarBuffer.subarray(offset, offset + 512);
-    offset += 512;
-
-    const name = header.toString("utf-8", 0, 100).replace(/\0.*/g, "");
-    const size = parseInt(header.toString("utf-8", 124, 136).replace(/\0.*/g, ""), 8);
-
-    if (isNaN(size)) break;
-
-    if (name === filepath || name === `./${filepath}`) {
-      return tarBuffer.subarray(offset, offset + size);
+async function downloadWithTagFallback(assetName) {
+  const tags = [`v${version}`, version];
+  let lastError = null;
+  for (const tag of tags) {
+    const url = `https://github.com/${repoSlug}/releases/download/${tag}/${assetName}`;
+    try {
+      return await fetch(url);
+    } catch (e) {
+      lastError = e;
     }
-
-    offset = (offset + size + 511) & ~511;
   }
-  return null;
+  throw lastError || new Error(`Asset not found: ${assetName}`);
 }
 
 try {
-  const tgzUrl = `https://registry.npmjs.org/${pkgName}/-/${shortName}-${version}.tgz`;
-  const tgzBuffer = await fetch(tgzUrl);
-
-  const tarBuffer = gunzipSync(tgzBuffer);
-
   for (const bin of BINARIES) {
-    const binName = isWindows ? `${bin}.exe` : bin;
-    const data = extractFromTarball(tarBuffer, `package/bin/${binName}`);
-
-    if (!data) {
-      console.warn(`[postinstall] Binary "${binName}" not found in tarball, skipping.`);
-      continue;
-    }
-
+    const binName = `${bin}${fileExt}`;
+    const assetName = `${bin}-${platform}${fileExt}`;
+    const data = await downloadWithTagFallback(assetName);
     const outPath = join(rootDir, binName);
     writeFileSync(outPath, data, { mode: 0o755 });
-    console.log(`[postinstall] Extracted ${binName}`);
+    console.log(`[postinstall] Downloaded ${binName}`);
   }
 
   console.log("[postinstall] Done.");
 } catch (e) {
   console.warn(
-    `[postinstall] Failed to download binary: ${e.message}\n` +
-    `You may need to install the platform package manually:\n` +
-    `  npm install ${pkgName}`
+    `[postinstall] Failed to download binaries: ${e.message}\n` +
+      `Please make sure release assets are published for version ${version}.`
   );
 }

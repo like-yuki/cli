@@ -37,12 +37,6 @@
     "@types/node": "^18",
     "release-it": "^16"
   },
-  "optionalDependencies": {
-    "@like-yuki/cli-linux-x64": "0.0.2-rc.6",
-    "@like-yuki/cli-linux-arm64": "0.0.2-rc.6",
-    "@like-yuki/cli-darwin-arm64": "0.0.2-rc.6",
-    "@like-yuki/cli-win32-x64": "0.0.2-rc.6"
-  },
   "publishConfig": {
     "access": "public"
   }

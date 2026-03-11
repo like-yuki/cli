@@ -1,17 +1,18 @@
 const path = require("path");
+const fs = require("fs");
 
 const PLATFORMS = {
-  "linux-x64": "@like-yuki/cli-linux-x64",
-  "linux-arm64": "@like-yuki/cli-linux-arm64",
-  "darwin-arm64": "@like-yuki/cli-darwin-arm64",
-  "win32-x64": "@like-yuki/cli-win32-x64",
+  "linux-x64": true,
+  "linux-arm64": true,
+  "darwin-arm64": true,
+  "win32-x64": true,
 };
 
 function getBinaryPath(binaryName) {
   const platformKey = `${process.platform}-${process.arch}`;
-  const pkg = PLATFORMS[platformKey];
+  const supported = PLATFORMS[platformKey];
 
-  if (!pkg) {
+  if (!supported) {
     throw new Error(
       `Unsupported platform: ${platformKey}. ` +
       `Supported: ${Object.keys(PLATFORMS).join(", ")}`
@@ -20,22 +21,20 @@ function getBinaryPath(binaryName) {
 
   const isWindows = process.platform === "win32";
   const binName = isWindows ? `${binaryName}.exe` : binaryName;
+  const localPath = path.join(__dirname, "..", binName);
 
+  // Preferred path: binaries downloaded by postinstall from GitHub Release assets.
   try {
-    return require.resolve(`${pkg}/bin/${binName}`);
-  } catch {
-    const fallbackPath = path.join(__dirname, "..", binName);
-    try {
-      require("fs").accessSync(fallbackPath, require("fs").constants.X_OK);
-      return fallbackPath;
-    } catch {
-      throw new Error(
-        `Could not find binary "${binaryName}" for platform ${platformKey}.\n` +
-        `The platform package "${pkg}" was not installed and no fallback binary was found.\n` +
-        `Try reinstalling: npm install -g @like-yuki/cli`
-      );
-    }
-  }
+    fs.accessSync(localPath, fs.constants.X_OK);
+    return localPath;
+  } catch {}
+
+  throw new Error(
+    `Could not find binary "${binaryName}" for platform ${platformKey}.\n` +
+    `Expected local binary at: ${localPath}\n` +
+    `Please reinstall to trigger postinstall download:\n` +
+    `  npm install -g @like-yuki/cli`
+  );
 }
 
 module.exports = { getBinaryPath, PLATFORMS };
